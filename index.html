@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Timer">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Timer do planszówek</title>
+<style>
+  :root {
+    --bg: #000;
+    --fg: #fff;
+    --muted: #8a8a8a;
+    --warn: #ffb300;
+    --alarm: #e00000;
+    --panel: #1c1c1e;
+    --accent: #2e7dff;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none; /* no pull-to-refresh */
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    touch-action: manipulation; /* no double-tap zoom */
+  }
+
+  #timer {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    outline: none;
+  }
+
+  #digits {
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    font-size: min(52vw, 70vh);
+  }
+
+  /* M:SS is wider than SS, so it needs a smaller font */
+  #digits.long { font-size: min(30vw, 70vh); }
+
+  #hint {
+    position: absolute;
+    bottom: calc(8vh + env(safe-area-inset-bottom));
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: clamp(16px, 5vw, 28px);
+    color: var(--muted);
+  }
+
+  body.warn #digits { color: var(--warn); }
+
+  body.alarm { animation: flash 0.5s steps(1, end) infinite; }
+  body.alarm #hint { color: var(--fg); }
+
+  @keyframes flash {
+    0%  { background: var(--alarm); }
+    50% { background: var(--bg); }
+  }
+
+  #settings-btn {
+    position: fixed;
+    top: calc(8px + env(safe-area-inset-top));
+    right: calc(8px + env(safe-area-inset-right));
+    width: 48px;
+    height: 48px;
+    padding: 10px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  #settings-btn svg { width: 100%; height: 100%; display: block; }
+
+  dialog {
+    width: min(92vw, 380px);
+    padding: 20px;
+    border: 0;
+    border-radius: 16px;
+    background: var(--panel);
+    color: var(--fg);
+  }
+
+  dialog::backdrop { background: rgba(0, 0, 0, 0.7); }
+
+  dialog h2 { margin: 0 0 16px; font-size: 22px; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 52px;
+    font-size: 18px;
+  }
+
+  .row input[type="number"] {
+    width: 110px;
+    padding: 10px;
+    border: 1px solid #444;
+    border-radius: 10px;
+    background: #000;
+    color: var(--fg);
+    font-size: 20px;
+    text-align: right;
+  }
+
+  .row input[type="checkbox"] {
+    width: 26px;
+    height: 26px;
+    accent-color: var(--accent);
+  }
+
+  .actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .actions button {
+    flex: 1;
+    padding: 14px;
+    border: 0;
+    border-radius: 12px;
+    background: #3a3a3c;
+    color: var(--fg);
+    font-size: 18px;
+    cursor: pointer;
+  }
+
+  .actions button.primary { background: var(--accent); }
+</style>
+</head>
+<body>
+
+<main id="timer" role="button" tabindex="0" aria-label="Timer - tapnij, aby zresetować i uruchomić">
+  <div id="digits">30</div>
+  <div id="hint">Tapnij, aby zacząć</div>
+</main>
+
+<button id="settings-btn" type="button" aria-label="Ustawienia">
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 1 1 0-7.2 3.6 3.6 0 0 1 0 7.2z"/>
+  </svg>
+</button>
+
+<dialog id="settings">
+  <form id="settings-form" method="dialog" novalidate>
+    <h2>Ustawienia</h2>
+    <label class="row">
+      <span>Czas (sekundy)</span>
+      <input id="opt-seconds" type="number" inputmode="numeric" min="1" max="3600" step="1" required>
+    </label>
+    <label class="row">
+      <span>Dźwięk alarmu</span>
+      <input id="opt-sound" type="checkbox">
+    </label>
+    <label class="row">
+      <span>Wibracja</span>
+      <input id="opt-vibrate" type="checkbox">
+    </label>
+    <div class="actions">
+      <button type="button" id="settings-cancel">Anuluj</button>
+      <button type="submit" class="primary">Zapisz</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  'use strict';
+
+  const STORAGE_KEY = 'board-game-timer.settings';
+  const DEFAULTS = { seconds: 30, sound: true, vibrate: true };
+  const MIN_SECONDS = 1;
+  const MAX_SECONDS = 3600;
+  const WARN_SECONDS = 5;
+  // Screen keeps flashing until tap, but sound/vibration stop after this time.
+  const ALARM_SIGNAL_SECONDS = 10;
+
+  const timerEl = document.getElementById('timer');
+  const digitsEl = document.getElementById('digits');
+  const hintEl = document.getElementById('hint');
+  const settingsBtn = document.getElementById('settings-btn');
+  const dialog = document.getElementById('settings');
+  const form = document.getElementById('settings-form');
+  const optSeconds = document.getElementById('opt-seconds');
+  const optSound = document.getElementById('opt-sound');
+  const optVibrate = document.getElementById('opt-vibrate');
+  const cancelBtn = document.getElementById('settings-cancel');
+
+  let settings = loadSettings();
+  let state = 'idle'; // 'idle' | 'running' | 'alarm'
+  let endAt = 0;
+  let rafId = 0;
+  let audioCtx = null;
+  let alarmOsc = null;
+  let wakeLock = null;
+
+  // ---------- settings ----------
+
+  function clampSeconds(value) {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return DEFAULTS.seconds;
+    return Math.min(MAX_SECONDS, Math.max(MIN_SECONDS, n));
+  }
+
+  function loadSettings() {
+    // localStorage can throw (private mode, blocked site data), so the app
+    // must work on defaults without it.
+    try {
+      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+      return {
+        seconds: clampSeconds(raw.seconds ?? DEFAULTS.seconds),
+        sound: typeof raw.sound === 'boolean' ? raw.sound : DEFAULTS.sound,
+        vibrate: typeof raw.vibrate === 'boolean' ? raw.vibrate : DEFAULTS.vibrate,
+      };
+    } catch {
+      return { ...DEFAULTS };
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch { /* settings stay in memory for this session only */ }
+  }
+
+  // ---------- rendering ----------
+
+  function render(seconds) {
+    const long = settings.seconds >= 60;
+    const text = long
+      ? Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0')
+      : String(seconds);
+    if (digitsEl.textContent !== text) digitsEl.textContent = text;
+    digitsEl.classList.toggle('long', long);
+    document.body.classList.toggle(
+      'warn',
+      state === 'running' && seconds <= WARN_SECONDS && settings.seconds > WARN_SECONDS
+    );
+  }
+
+  function setHint(text) {
+    hintEl.textContent = text;
+  }
+
+  // ---------- timer ----------
+
+  function start() {
+    stopAlarmSignals();
+    cancelAnimationFrame(rafId);
+    document.body.classList.remove('alarm');
+    state = 'running';
+    // Deadline-based on wall clock instead of decrementing a counter:
+    // timers and rAF are throttled/suspended in background and when the
+    // device sleeps (performance.now() may freeze there too), Date.now() is not.
+    endAt = Date.now() + settings.seconds * 1000;
+    setHint('');
+    tick();
+  }
+
+  function tick() {
+    const remaining = endAt - Date.now();
+    if (remaining <= 0) {
+      startAlarm();
+      return;
+    }
+    render(Math.ceil(remaining / 1000));
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function startAlarm() {
+    state = 'alarm';
+    render(0);
+    document.body.classList.add('alarm');
+    setHint('Koniec czasu! Tapnij, aby zacząć od nowa');
+    if (settings.sound) playAlarmSound();
+    if (settings.vibrate && navigator.vibrate) {
+      const pattern = [];
+      for (let i = 0; i < ALARM_SIGNAL_SECONDS * 2; i++) pattern.push(300, 200);
+      try { navigator.vibrate(pattern); } catch { /* ignore */ }
+    }
+  }
+
+  function goIdle() {
+    stopAlarmSignals();
+    cancelAnimationFrame(rafId);
+    state = 'idle';
+    document.body.classList.remove('alarm');
+    render(settings.seconds);
+    setHint('Tapnij, aby zacząć');
+    releaseWakeLock();
+  }
+
+  // ---------- alarm signals ----------
+
+  function unlockAudio() {
+    // AudioContext can only be started from a user gesture, so it is
+    // created/resumed on every tap and reused later when the alarm fires.
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!audioCtx) audioCtx = new Ctx();
+      if (audioCtx.state !== 'running') audioCtx.resume().catch(() => {});
+    } catch { /* no audio available */ }
+  }
+
+  function playAlarmSound() {
+    if (!audioCtx) return;
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 880;
+      gain.gain.value = 0;
+      // Beep pattern: 250 ms on / 250 ms off
+      const t0 = audioCtx.currentTime;
+      for (let t = 0; t < ALARM_SIGNAL_SECONDS; t += 0.5) {
+        gain.gain.setValueAtTime(0.4, t0 + t);
+        gain.gain.setValueAtTime(0, t0 + t + 0.25);
+      }
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0 + ALARM_SIGNAL_SECONDS);
+      alarmOsc = osc;
+    } catch { /* ignore */ }
+  }
+
+  function stopAlarmSignals() {
+    if (alarmOsc) {
+      try { alarmOsc.stop(); } catch { /* already stopped */ }
+      try { alarmOsc.disconnect(); } catch { /* ignore */ }
+      alarmOsc = null;
+    }
+    if (navigator.vibrate) {
+      try { navigator.vibrate(0); } catch { /* ignore */ }
+    }
+  }
+
+  // ---------- screen: wake lock + fullscreen ----------
+
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator) || wakeLock) return;
+    try {
+      const lock = await navigator.wakeLock.request('screen');
+      wakeLock = lock;
+      lock.addEventListener('release', () => {
+        if (wakeLock === lock) wakeLock = null;
+      });
+    } catch { /* denied, e.g. battery saver */ }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) {
+      wakeLock.release().catch(() => {});
+      wakeLock = null;
+    }
+  }
+
+  function enterFullscreen() {
+    // Not available on iPhone Safari - there the app goes fullscreen only
+    // when launched from the home screen.
+    const el = document.documentElement;
+    if (document.fullscreenElement || !el.requestFullscreen) return;
+    if (window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches) return;
+    try {
+      el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+    } catch { /* ignore */ }
+  }
+
+  // The system releases the wake lock whenever the page gets hidden.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state !== 'idle') requestWakeLock();
+  });
+
+  // ---------- input ----------
+
+  function onTap() {
+    if (dialog.open) return;
+    unlockAudio();
+    enterFullscreen();
+    requestWakeLock();
+    start();
+  }
+
+  timerEl.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    onTap();
+  });
+
+  timerEl.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      onTap();
+    }
+  });
+
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  settingsBtn.addEventListener('click', () => {
+    goIdle();
+    optSeconds.value = settings.seconds;
+    optSound.checked = settings.sound;
+    optVibrate.checked = settings.vibrate;
+    dialog.showModal();
+  });
+
+  cancelBtn.addEventListener('click', () => dialog.close());
+
+  form.addEventListener('submit', () => {
+    settings = {
+      seconds: clampSeconds(optSeconds.value || settings.seconds),
+      sound: optSound.checked,
+      vibrate: optVibrate.checked,
+    };
+    saveSettings();
+    render(settings.seconds);
+  });
+
+  render(settings.seconds);
+})();
+</script>
+</body>
+</html>

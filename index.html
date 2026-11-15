@@ -447,6 +447,11 @@
   });
 
   render(settings.seconds);
+
+  // Offline support. Needs HTTPS (or localhost) - on file:// it is skipped.
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
 })();
 </script>
 </body>
